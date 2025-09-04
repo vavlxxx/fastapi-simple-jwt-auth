@@ -31,4 +31,27 @@ class TokenType(str, Enum):
     REFRESH = "refresh"
 
 
+class CreatedTokenDTO(BaseDTO):
+    type: TokenType
+    token: str
+    expires_at: datetime
+
+
+class TokenAddDTO(BaseDTO):
+    owner_id: int
+    type: TokenType
+    hashed_data: str
+    expires_at: datetime
+
+
+class TokenDTO(TokenAddDTO):
+    id: int
+
+
+class TokenResponseDTO(BaseDTO):
+    access_token: str
+    refresh_token: str
+    type: str = "Bearer"
+
+
 LoginData = Annotated[UserLoginDTO, Form()]

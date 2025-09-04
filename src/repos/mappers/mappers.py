@@ -3,6 +3,4 @@ from src.repos.mappers.base import DataMapper
 from src.schemas.auth import UserDTO
 
 
-class AuthMapper(DataMapper):
-    model = User
-    schema = UserDTO
+class AuthMapper(DataMapper[User, UserDTO]): ...

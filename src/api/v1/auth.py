@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
+from schemas.auth import TokenResponseDTO
 from src.api.v1.dependencies.auth import UserDataByAccess, UserDataByRefresh
+from src.api.v1.dependencies.db import DBDep
 from src.schemas.auth import LoginData
-
-# from src.services.auth import AuthService
+from src.services.auth import AuthService
 
 router = APIRouter(
     prefix="/auth",
@@ -12,17 +13,14 @@ router = APIRouter(
 
 
 @router.post("/login/")
-async def login(login_data: LoginData):
+async def login(
+    db: DBDep,
+    login_data: LoginData,
+) -> TokenResponseDTO:
     """
     Login user
     """
-
-    access_token, refresh_token = (..., ...)
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-    }
+    return await AuthService(db).login_user(login_data=login_data)
 
 
 @router.get("/profile/")

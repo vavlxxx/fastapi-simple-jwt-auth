@@ -3,6 +3,8 @@ from typing import Self
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.repos.auth import AuthRepo, TokenRepo
+
 
 class DBManager:
     def __init__(self, session_factory: async_sessionmaker) -> None:
@@ -10,6 +12,8 @@ class DBManager:
 
     async def __aenter__(self) -> Self:
         self.session: AsyncSession = self.session_factory()
+        self.auth = AuthRepo(self.session)
+        self.tokens = TokenRepo(self.session)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:

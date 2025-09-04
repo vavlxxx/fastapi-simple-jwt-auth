@@ -6,7 +6,8 @@ from sqlalchemy.exc import DBAPIError, IntegrityError, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repos.mappers.base import DataMapper, ModelType, SchemaType
-from utils.exceptions import (
+from src.schemas.base import BaseDTO
+from src.utils.exceptions import (
     ObjectAlreadyExistsError,
     ObjectNotFoundError,
     ValueOutOfRangeError,
@@ -62,11 +63,11 @@ class BaseRepo(Generic[ModelType, SchemaType]):
 
         return self.schema.model_validate(obj)
 
-    async def add_bulk(self, data: Sequence[SchemaType]) -> None:
+    async def add_bulk(self, data: Sequence[BaseDTO]) -> None:
         add_obj_stmt = insert(self.model).values([item.model_dump() for item in data])
         await self.session.execute(add_obj_stmt)
 
-    async def add(self, data: SchemaType, **params) -> SchemaType:
+    async def add(self, data: BaseDTO, **params) -> SchemaType:
         add_obj_stmt = (
             insert(self.model)
             .values(**data.model_dump(), **params)
@@ -82,7 +83,7 @@ class BaseRepo(Generic[ModelType, SchemaType]):
         obj = result.scalars().one()
         return self.schema.model_validate(obj)
 
-    async def get_one_or_add(self, data: SchemaType, **params) -> SchemaType:
+    async def get_one_or_add(self, data: BaseDTO, **params) -> SchemaType:
         obj = await self.get_one_or_none(**data.model_dump())
         if obj is None:
             return await self.add(data, **params)

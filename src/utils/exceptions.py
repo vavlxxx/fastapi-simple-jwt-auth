@@ -17,3 +17,7 @@ class ObjectAlreadyExistsError(ApplicationBaseError):
 
 class ValueOutOfRangeError(ApplicationBaseError):
     detail = "Value out of integer range"
+
+
+class InvalidLoginDataError(ApplicationBaseError):
+    detail = "Invalid login data, wrong password or username"

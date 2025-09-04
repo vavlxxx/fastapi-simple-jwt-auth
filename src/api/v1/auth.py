@@ -2,7 +2,8 @@ from fastapi import APIRouter
 
 from src.api.v1.dependencies.auth import UserDataByAccess, UserDataByRefresh
 from src.schemas.auth import LoginData
-from src.services.auth import AuthService
+
+# from src.services.auth import AuthService
 
 router = APIRouter(
     prefix="/auth",
@@ -16,7 +17,7 @@ async def login(login_data: LoginData):
     Login user
     """
 
-    access_token, refresh_token = await AuthService().login_user(login_data)
+    access_token, refresh_token = (..., ...)
 
     return {
         "access_token": access_token,
@@ -37,10 +38,7 @@ async def refresh(userdata: UserDataByRefresh):
     """
     Refresh token
     """
-    access_token = AuthService().create_access_token(
-        payload={"sub": userdata, "hello": "world"}
-    )
-    refresh_token = AuthService().create_refresh_token(payload={"sub": userdata})
+    access_token, refresh_token = (..., ...)
 
     return {
         "access_token": access_token,

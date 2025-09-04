@@ -16,7 +16,7 @@ class Token(Base):
 
 
 class User(Base):
-    username: Mapped[str]
+    username: Mapped[str] = mapped_column(unique=True)
     first_name: Mapped[str]
     last_name: Mapped[str]
     birth_date: Mapped[datetime]

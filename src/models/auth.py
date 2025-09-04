@@ -17,9 +17,9 @@ class Token(Base):
 
 class User(Base):
     username: Mapped[str] = mapped_column(unique=True)
-    first_name: Mapped[str]
-    last_name: Mapped[str]
-    birth_date: Mapped[datetime]
+    first_name: Mapped[str] = mapped_column(nullable=True)
+    last_name: Mapped[str] = mapped_column(nullable=True)
+    birth_date: Mapped[datetime] = mapped_column(nullable=True)
     hashed_password: Mapped[str]
-    email: Mapped[str]
+    email: Mapped[str] = mapped_column(nullable=True)
     bio: Mapped[str] = mapped_column(Text, nullable=True)

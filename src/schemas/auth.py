@@ -13,13 +13,24 @@ class UserLoginDTO(BaseDTO):
     password: str
 
 
-class UserDTO(UserLoginDTO):
+class UserRegisterDTO(UserLoginDTO):
+    username: str
+    password: str
+
+
+class UserAddDTO(BaseDTO):
+    username: str
+    hashed_password: str
+
+
+class UserDTO(BaseDTO):
     id: int
-    first_name: str
-    last_name: str
-    birth_date: datetime
-    email: EmailStr
-    bio: str
+    username: str
+    first_name: str | None
+    last_name: str | None
+    birth_date: datetime | None
+    email: EmailStr | None
+    bio: str | None
 
 
 class UserWithPasswordDTO(UserDTO):
@@ -55,3 +66,4 @@ class TokenResponseDTO(BaseDTO):
 
 
 LoginData = Annotated[UserLoginDTO, Form()]
+RegisterData = Annotated[UserRegisterDTO, Form()]

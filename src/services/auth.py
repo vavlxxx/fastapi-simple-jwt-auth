@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import jwt
 from fastapi import HTTPException
@@ -9,9 +9,12 @@ from src.config import settings
 from src.schemas.auth import (
     CreatedTokenDTO,
     LoginData,
+    RegisterData,
     TokenAddDTO,
     TokenResponseDTO,
     TokenType,
+    UserAddDTO,
+    UserDTO,
 )
 from src.services.base import BaseService
 from src.utils.db_manager import DBManager
@@ -37,7 +40,7 @@ class AuthService(BaseService):
         type: TokenType,
     ) -> CreatedTokenDTO:
         token_data = payload.copy()
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         expires = now + expires_delta
         expires_timestamp = datetime.timestamp(expires)
 
@@ -83,10 +86,8 @@ class AuthService(BaseService):
         return decoded_token
 
     async def login_user(self, login_data: LoginData):
-        hashed_password = self._hash_data(login_data.password)
         user = await self.db.auth.get_user_with_passwd(username=login_data.username)
-
-        is_same = self._verify_data(hashed_password, user.hashed_password)
+        is_same = self._verify_data(login_data.password, user.hashed_password)
         if not user or not is_same:
             raise InvalidLoginDataError
 
@@ -94,17 +95,31 @@ class AuthService(BaseService):
             payload={"sub": login_data.username, "uid": user.id}
         )
         refresh_token = self.create_refresh_token(payload={"sub": login_data.username})
-        hashed_refresh_token = self._hash_data(refresh_token)
+        hashed_refresh_token = self._hash_data(refresh_token.token)
 
-        data_to_add = TokenAddDTO(
+        token_to_add = TokenAddDTO(
             hashed_data=hashed_refresh_token,
+            owner_id=user.id,
             **refresh_token.model_dump(exclude={"token"}),
         )
-        await self.db.tokens.delete(owner_id=user.id)
-        await self.db.tokens.add(data_to_add)
+        await self.db.tokens.delete(
+            owner_id=user.id,
+            ensure_existence=False,
+        )
+        await self.db.tokens.add(token_to_add)
         await self.db.commit()
 
         return TokenResponseDTO(
             access_token=access_token.token,
             refresh_token=refresh_token.token,
         )
+
+    async def register_user(self, register_data: RegisterData) -> UserDTO:
+        hashed_password = self._hash_data(register_data.password)
+        user_to_add = UserAddDTO(
+            hashed_password=hashed_password,
+            **register_data.model_dump(exclude={"password"}),
+        )
+        user = await self.db.auth.add(user_to_add)
+        await self.db.commit()
+        return user

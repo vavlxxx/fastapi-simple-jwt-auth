@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 
+import bcrypt
 import jwt
 from fastapi import HTTPException
 from jwt.exceptions import ExpiredSignatureError
-from passlib.context import CryptContext
 
 from src.config import settings
 from src.schemas.auth import (
@@ -22,16 +22,20 @@ from src.utils.exceptions import InvalidLoginDataError
 
 
 class AuthService(BaseService):
-    _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
     def __init__(self, db_manager: DBManager | None = None) -> None:
         super().__init__(db_manager=db_manager)
 
-    def _hash_data(self, password) -> str:
-        return self._pwd_context.hash(password)
+    def _hash_data(self, password: str) -> str:
+        salt = bcrypt.gensalt()
+        pwd_bytes: bytes = password.encode(encoding="utf-8")
+        hashed_pwd_bytes = bcrypt.hashpw(pwd_bytes, salt)
+        return hashed_pwd_bytes.decode(encoding="utf-8")
 
-    def _verify_data(self, plain_password, hashed_password) -> bool:
-        return self._pwd_context.verify(plain_password, hashed_password)
+    def _verify_data(self, password: str, hashed_password: str) -> bool:
+        return bcrypt.checkpw(
+            password=password.encode(encoding="utf-8"),
+            hashed_password=hashed_password.encode(encoding="utf-8"),
+        )
 
     def _generate_token(
         self,

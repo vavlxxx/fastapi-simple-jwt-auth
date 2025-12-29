@@ -1,35 +1,30 @@
-from datetime import datetime
+from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase, class_mapper
 
-from sqlalchemy import Integer, MetaData, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
-
-convention = {
-    "ix": "ix_%(column_0_label)s",
-    "uq": "uq_%(table_name)s_%(column_0_name)s",
-    "ck": "ck_%(table_name)s_%(constraint_name)s",
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    "pk": "pk_%(table_name)s",
-}
-metadata_obj = MetaData(naming_convention=convention)
+from src.config import settings
+from src.models.mixins.timing import TimingMixin
 
 
-class Base(DeclarativeBase):
+class Base(DeclarativeBase, TimingMixin):
     __abstract__ = True
-    metadata = metadata_obj
+    __mapper_args__ = {
+        "eager_defaults": True,
+    }
 
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        autoincrement=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(),
-        onupdate=func.now(),
+    metadata = MetaData(naming_convention=settings.db.NAMING_CONVENTION)
+    repr_exclude_cols = (
+        "created_at",
+        "updated_at",
     )
 
-    @declared_attr.directive
-    def __tablename__(cls) -> str:
-        return cls.__name__.lower() + "s"
+    def to_dict(self) -> dict:
+        columns = class_mapper(self.__class__).columns
+        return {column.key: getattr(self, column.key) for column in columns}
+
+    def __repr__(self):
+        cols = []
+        for k, v in self.to_dict().items():
+            if k not in self.repr_exclude_cols:
+                cols.append(f"{k}={v!r}")
+
+        return f"{self.__class__.__name__}({', '.join(cols)})"

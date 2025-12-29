@@ -5,23 +5,26 @@ import jwt
 from fastapi import HTTPException, Response
 from jwt.exceptions import ExpiredSignatureError
 
-from schemas.auth import UserWithPasswordDTO
 from src.config import settings
 from src.schemas.auth import (
     CreatedTokenDTO,
-    LoginData,
-    RegisterData,
     TokenAddDTO,
     TokenResponseDTO,
     TokenType,
     UserAddDTO,
     UserDTO,
+    UserLoginDTO,
+    UserRegisterDTO,
+    UserUpdateDTO,
+    UserWithPasswordDTO,
 )
 from src.services.base import BaseService
 from src.utils.db_manager import DBManager
 from src.utils.exceptions import (
     InvalidLoginDataError,
+    ObjectAlreadyExistsError,
     ObjectNotFoundError,
+    UserExistsHTTPError,
     UserNotFoundError,
 )
 
@@ -59,8 +62,8 @@ class AuthService(BaseService):
 
         token = jwt.encode(
             payload=token_data,
-            key=settings.JWT_PRIVATE_KEY.read_text(),
-            algorithm=settings.JWT_ALGORITHM,
+            key=settings.auth.JWT_PRIVATE_KEY.read_text(),
+            algorithm=settings.auth.JWT_ALGORITHM,
         )
 
         return CreatedTokenDTO(
@@ -72,14 +75,14 @@ class AuthService(BaseService):
     def create_access_token(self, payload: dict) -> CreatedTokenDTO:
         return self._generate_token(
             payload=payload,
-            expires_delta=settings.JWT_EXPIRE_DELTA_ACCESS,
+            expires_delta=settings.auth.JWT_EXPIRE_DELTA_ACCESS,
             type=TokenType.ACCESS,
         )
 
     def create_refresh_token(self, payload: dict) -> CreatedTokenDTO:
         return self._generate_token(
             payload=payload,
-            expires_delta=settings.JWT_EXPIRE_DELTA_REFRESH,
+            expires_delta=settings.auth.JWT_EXPIRE_DELTA_REFRESH,
             type=TokenType.REFRESH,
         )
 
@@ -87,20 +90,16 @@ class AuthService(BaseService):
         try:
             decoded_token = jwt.decode(
                 jwt=token,
-                key=settings.JWT_PUBLIC_KEY.read_text(),
-                algorithms=(settings.JWT_ALGORITHM),
+                key=settings.auth.JWT_PUBLIC_KEY.read_text(),
+                algorithms=(settings.auth.JWT_ALGORITHM),
             )
         except ExpiredSignatureError as exc:
             raise HTTPException(status_code=401, detail=str(exc))
         return decoded_token
 
-    async def login_user(
-        self, login_data: LoginData, response: Response
-    ) -> TokenResponseDTO:
+    async def login_user(self, login_data: UserLoginDTO, response: Response) -> TokenResponseDTO:
         try:
-            user: UserWithPasswordDTO = await self.db.auth.get_user_with_passwd(
-                username=login_data.username
-            )
+            user: UserWithPasswordDTO = await self.db.auth.get_user_with_passwd(username=login_data.username)
         except ObjectNotFoundError as exc:
             raise InvalidLoginDataError from exc
 
@@ -114,31 +113,30 @@ class AuthService(BaseService):
         self,
         response: Response,
         uid: int | None = None,
-        user: UserDTO | UserWithPasswordDTO | None = None,
+        user: UserDTO | UserWithPasswordDTO | None = None,  # pyright: ignore
     ) -> TokenResponseDTO:
         if user is None:
-            user = await self.db.auth.get_one(id=uid)
-        access_token = self.create_access_token(
-            payload={"sub": user.username, "uid": user.id}
-        )
+            user: UserWithPasswordDTO = await self.db.auth.get_one(id=uid)  # pyright: ignore
+
+        access_token = self.create_access_token(payload={"username": user.username, "sub": f"{user.id}"})
         refresh_token = self.create_refresh_token(payload={"sub": f"{user.id}"})
 
         hashed_refresh_token = self._hash_data(refresh_token.token)
 
         token_to_update = TokenAddDTO(
             hashed_data=hashed_refresh_token,
-            owner_id=user.id,
+            user_id=user.id,
             **refresh_token.model_dump(exclude={"token"}),
         )
         await self.db.tokens.delete(
-            owner_id=user.id,
+            user_id=user.id,
             ensure_existence=False,
         )
         await self.db.tokens.add(token_to_update)
         await self.db.commit()
 
         response.set_cookie(
-            key="refresh_token",
+            key=settings.auth.REFRESH_TOKEN_COOKIE_KEY,
             value=refresh_token.token,
             httponly=True,
         )
@@ -148,18 +146,26 @@ class AuthService(BaseService):
             refresh_token=refresh_token.token,
         )
 
-    async def register_user(self, register_data: RegisterData) -> UserDTO:
+    async def register_user(self, register_data: UserRegisterDTO) -> UserDTO:
         hashed_password = self._hash_data(register_data.password)
         user_to_add = UserAddDTO(
             hashed_password=hashed_password,
             **register_data.model_dump(exclude={"password"}),
         )
-        user = await self.db.auth.add(user_to_add)
+        try:
+            user = await self.db.auth.add(user_to_add)
+        except ObjectAlreadyExistsError as exc:
+            raise UserExistsHTTPError from exc
         await self.db.commit()
         return user
 
-    async def get_profile(self, username: str) -> UserDTO:
+    async def get_profile(self, uid: int) -> UserDTO:
         try:
-            return await self.db.auth.get_user_with_passwd(username=username)
+            return await self.db.auth.get_user_with_passwd(id=uid)
         except ObjectNotFoundError as exc:
             raise UserNotFoundError from exc
+
+    async def update_profile(self, uid: int, data: UserUpdateDTO) -> UserDTO:
+        await self.db.auth.edit(id=uid, data=data, ensure_existence=False)  # pyright: ignore
+        await self.db.commit()
+        return await self.db.auth.get_one(id=uid)

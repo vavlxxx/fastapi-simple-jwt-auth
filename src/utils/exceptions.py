@@ -10,8 +10,16 @@ class ApplicationError(Exception):
         super().__init__(self.detail)
 
 
+class ObjectInvalidValueError(ApplicationError):
+    detail = "Object invalid value"
+
+
 class ObjectNotFoundError(ApplicationError):
     detail = "Object not found"
+
+
+class RelatedObjectExistsError(ApplicationError):
+    detail = "Related object already exists"
 
 
 class ObjectAlreadyExistsError(ApplicationError):
@@ -30,6 +38,10 @@ class UserNotFoundError(ApplicationError):
     detail = "User not found"
 
 
+class UserExistsError(ApplicationError):
+    detail = "User already exists"
+
+
 class ApplicationHTTPError(HTTPException):
     detail = "Something went wrong"
     status = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -46,7 +58,7 @@ class ExpiredSignatureHTTPError(ApplicationHTTPError):
 
 
 class InvalidTokenTypeHTTPError(ApplicationHTTPError):
-    detail = "Invalid token type, expected {}, got {}"
+    detail = "Invalid token type, expected {1}, got {2}"
     status = status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def __init__(self, *args, expected_type, actual_type, **kwargs):
@@ -72,6 +84,11 @@ class MissingTokenHTTPError(ApplicationHTTPError):
 class UserNotFoundHTTPError(ApplicationHTTPError):
     detail = "User not found"
     status = status.HTTP_404_NOT_FOUND
+
+
+class UserExistsHTTPError(ApplicationHTTPError):
+    detail = "User already exists"
+    status = status.HTTP_409_CONFLICT
 
 
 class InvalidLoginDataHTTPError(ApplicationHTTPError):

@@ -1,18 +1,22 @@
 from fastapi import APIRouter, Response
 
-from src.api.v1.dependencies.auth import UidByRefresh, UsernameByAccess
+from src.api.v1.dependencies.auth import UidByAccess, UidByRefresh
 from src.api.v1.dependencies.db import DBDep
 from src.api.v1.responses.auth import (
     AUTH_LOGIN_RESPONSES,
+    AUTH_LOGOUT_RESPONSES,
     AUTH_PROFILE_RESPONSES,
     AUTH_REFRESH_RESPONSES,
     AUTH_REGISTER_RESPONSES,
 )
-from src.schemas.auth import LoginData, RegisterData, TokenResponseDTO, UserDTO
+from src.config import settings
+from src.schemas.auth import TokenResponseDTO, UserDTO, UserLoginDTO, UserRegisterDTO, UserUpdateDTO
 from src.services.auth import AuthService
 from src.utils.exceptions import (
     InvalidLoginDataError,
     InvalidLoginDataHTTPError,
+    UserExistsError,
+    UserExistsHTTPError,
     UserNotFoundError,
     UserNotFoundHTTPError,
 )
@@ -25,15 +29,16 @@ router = APIRouter(
 
 @router.post(
     path="/login/",
+    summary="Войти в аккаунт",
     responses=AUTH_LOGIN_RESPONSES,
 )
 async def login(
     db: DBDep,
-    login_data: LoginData,
+    login_data: UserLoginDTO,
     response: Response,
 ):
     """
-    ## 🔒 Login to existing user account
+    ## 🔒 Войти в существующий акканут
     """
     try:
         token_response: TokenResponseDTO = await AuthService(db).login_user(
@@ -48,35 +53,36 @@ async def login(
 
 @router.post(
     path="/register/",
+    summary="Зарегистрироваться",
     responses=AUTH_REGISTER_RESPONSES,
 )
 async def register(
     db: DBDep,
-    register_data: RegisterData,
+    register_data: UserRegisterDTO,
 ):
     """
-    ## 🔒 Register new user
-
-    Only username and password are required
+    ## 🔒 Зарегистрировать нового пользователя
     """
-    return await AuthService(db).register_user(register_data=register_data)
+    try:
+        return await AuthService(db).register_user(register_data=register_data)
+    except UserExistsError as exc:
+        raise UserExistsHTTPError from exc
 
 
 @router.get(
     path="/profile/",
+    summary="Получить профиль пользователя",
     responses=AUTH_PROFILE_RESPONSES,
 )
 async def get_profile(
     db: DBDep,
-    username: UsernameByAccess,
+    uid: UidByAccess,
 ) -> UserDTO:
     """
-    ## 🔒 Authorized user profile
-
-    Example of data which can be stored in User model of database
+    ## 🔒 Профиль авторизованного пользователя
     """
     try:
-        return await AuthService(db).get_profile(username=username)
+        return await AuthService(db).get_profile(uid=uid)
     except UserNotFoundError as exc:
         raise UserNotFoundHTTPError from exc
 
@@ -84,6 +90,7 @@ async def get_profile(
 @router.get(
     path="/refresh/",
     responses=AUTH_REFRESH_RESPONSES,
+    summary="Получить новые Access и Refresh токены",
 )
 async def refresh(
     db: DBDep,
@@ -91,9 +98,7 @@ async def refresh(
     response: Response,
 ) -> TokenResponseDTO:
     """
-    ## 🗝️ Get new access and refresh tokens
-
-    Authorized user can get new access and refresh tokens by restoring refresh token from **http only** cookie `refresh_token`
+    ## 🗝️ Получить новые Access и Refresh токены
     """
     token_response: TokenResponseDTO = await AuthService(db).update_tokens(
         uid=uid,
@@ -101,3 +106,36 @@ async def refresh(
     )
 
     return token_response
+
+
+@router.put(
+    path="/profile/",
+    summary="Обновить профиль пользователя",
+    responses=AUTH_PROFILE_RESPONSES,
+)
+async def update_profile(
+    db: DBDep,
+    uid: UidByAccess,
+    data: UserUpdateDTO,
+) -> UserDTO:
+    """
+    ## 👤 Обновить профиль пользователя
+    """
+    profile = await AuthService(db).update_profile(uid=uid, data=data)
+    return profile
+
+
+@router.post(
+    path="/logout/",
+    summary="Выход из аккаунта",
+    responses=AUTH_LOGOUT_RESPONSES,
+)
+async def logout(
+    _: UidByRefresh,
+    response: Response,
+) -> dict[str, str]:
+    """
+    ## 🔒 Выход из аккаунта
+    """
+    response.delete_cookie(settings.auth.REFRESH_TOKEN_COOKIE_KEY)
+    return {"detail": "Successfully logged out"}

@@ -1,21 +1,19 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated
 
-from fastapi import Form
-from pydantic import EmailStr
+from pydantic import Field
 
 from src.schemas.base import BaseDTO
 
 
 class UserLoginDTO(BaseDTO):
-    username: str
-    password: str
+    username: str = Field("admin123", min_length=8, max_length=32)
+    password: str = Field("admin123", min_length=8)
 
 
 class UserRegisterDTO(UserLoginDTO):
-    username: str
-    password: str
+    username: str = Field("admin123", min_length=8, max_length=32)
+    password: str = Field("admin123", min_length=8)
 
 
 class UserAddDTO(BaseDTO):
@@ -25,12 +23,14 @@ class UserAddDTO(BaseDTO):
 
 class UserDTO(BaseDTO):
     id: int
-    username: str
-    first_name: str | None
-    last_name: str | None
-    birth_date: datetime | None
-    email: EmailStr | None
-    bio: str | None
+    username: str = Field(..., min_length=8, max_length=32)
+    first_name: str | None = Field(None, min_length=1, max_length=150)
+    last_name: str | None = Field(None, min_length=1, max_length=150)
+
+
+class UserUpdateDTO(BaseDTO):
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 class UserWithPasswordDTO(UserDTO):
@@ -49,7 +49,7 @@ class CreatedTokenDTO(BaseDTO):
 
 
 class TokenAddDTO(BaseDTO):
-    owner_id: int
+    user_id: int
     type: TokenType
     hashed_data: str
     expires_at: datetime
@@ -63,7 +63,3 @@ class TokenResponseDTO(BaseDTO):
     access_token: str
     refresh_token: str
     type: str = "Bearer"
-
-
-LoginData = Annotated[UserLoginDTO, Form()]
-RegisterData = Annotated[UserRegisterDTO, Form()]

@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError
 
 from src.api.v1.dependencies.db import DBDep
+from src.config import settings
 from src.schemas.auth import TokenType
 from src.services.auth import AuthService
 from src.utils.exceptions import (
@@ -25,7 +26,7 @@ def _get_access_token(creds: BearerCredentials):
 
 
 def _get_refresh_token(request: Request):
-    token = request.cookies.get("refresh_token")
+    token = request.cookies.get(settings.auth.REFRESH_TOKEN_COOKIE_KEY)
     if not token:
         raise MissingTokenHTTPError
     return token
@@ -48,10 +49,10 @@ def _validate_token_type(payload: dict, expected_type: TokenType):
 
 
 def _extract_token_subject(payload: dict) -> str:
-    username = payload.get("sub")
-    if not username:
+    sub = payload.get("sub")
+    if not sub:
         raise MissingSubjectHTTPError
-    return username
+    return sub
 
 
 def resolve_token_by_type(token_type: TokenType):
@@ -60,7 +61,7 @@ def resolve_token_by_type(token_type: TokenType):
         def get_sub_from_access(creds: BearerCredentials):
             payload = _decode_token(_get_access_token(creds))
             _validate_token_type(payload, token_type)
-            return _extract_token_subject(payload)
+            return int(_extract_token_subject(payload))
 
         return get_sub_from_access
 
@@ -71,7 +72,7 @@ def resolve_token_by_type(token_type: TokenType):
             _validate_token_type(payload, token_type)
             uid = int(_extract_token_subject(payload))
             try:
-                await db.tokens.get_one(owner_id=uid, type=token_type)
+                await db.tokens.get_one(user_id=uid, type=token_type)
             except ObjectNotFoundError as exc:
                 raise WithdrawnTokenHTTPError from exc
             return uid
@@ -79,5 +80,5 @@ def resolve_token_by_type(token_type: TokenType):
         return get_sub_from_refresh
 
 
-UsernameByAccess = Annotated[str, Depends(resolve_token_by_type(TokenType.ACCESS))]
+UidByAccess = Annotated[int, Depends(resolve_token_by_type(TokenType.ACCESS))]
 UidByRefresh = Annotated[int, Depends(resolve_token_by_type(TokenType.REFRESH))]

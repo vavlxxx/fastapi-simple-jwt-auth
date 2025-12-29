@@ -218,3 +218,9 @@ __marimo__/
 # Custom
 .vscode/
 creds/
+logs/
+.env.test
+.env.docker
+.env.postgres
+*.db
+None

@@ -45,8 +45,19 @@ class TokenConfig(BaseModel):
     JWT_PUBLIC_KEY: Path = BASE_DIR / "creds" / "jwt-public.pem"
 
 
+class GunicornConfig(BaseModel):
+    GUNICORN_PORT: int = 8888
+    GUNICORN_RELOAD: bool = False
+    GUNICORN_HOST: str = "0.0.0.0"
+    GUNICORN_WORKERS: int = 1
+    GUNICORN_TIMEOUT: int = 900
+    GUNICORN_WORKERS_CLASS: str = "uvicorn.workers.UvicornWorker"
+    GUNICORN_ERROR_LOG: str | None = "-"
+    GUNICORN_ACCESS_LOG: str | None = "-"
+
+
 class UvicornConfig(BaseModel):
-    UVICORN_PORT: int = 8000
+    UVICORN_PORT: int = 8888
     UVICORN_HOST: str = "127.0.0.1"
     UVICORN_RELOAD: bool = True
 
@@ -54,6 +65,8 @@ class UvicornConfig(BaseModel):
 class GeneralAppConfig(BaseModel):
     TITLE: str = "FastAPI JWT Authentication"
     MODE: Literal["TEST", "DEV"]
+    API_PREFIX: str = "/api"
+    V1_PREFIX: str = "/v1"
 
 
 class Settings(BaseSettings):
@@ -61,6 +74,7 @@ class Settings(BaseSettings):
     app: GeneralAppConfig
     auth: TokenConfig = TokenConfig()
     uvicorn: UvicornConfig = UvicornConfig()
+    gunicorn: GunicornConfig = GunicornConfig()
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

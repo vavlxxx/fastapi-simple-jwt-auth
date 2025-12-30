@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Body, Response
 
 from src.api.v1.dependencies.auth import UidByAccess, UidByRefresh
 from src.api.v1.dependencies.db import DBDep
+from src.api.v1.examples.auth import get_examples_auth_post_login, get_examples_auth_put_profile
 from src.api.v1.responses.auth import (
     AUTH_LOGIN_RESPONSES,
     AUTH_LOGOUT_RESPONSES,
@@ -11,7 +12,7 @@ from src.api.v1.responses.auth import (
 )
 from src.config import settings
 from src.schemas.auth import TokenResponseDTO, UserDTO, UserLoginDTO, UserRegisterDTO, UserUpdateDTO
-from src.services.auth import AuthService
+from src.services.auth import AuthService, TokenService
 from src.utils.exceptions import (
     InvalidLoginDataError,
     InvalidLoginDataHTTPError,
@@ -34,8 +35,11 @@ router = APIRouter(
 )
 async def login(
     db: DBDep,
-    login_data: UserLoginDTO,
     response: Response,
+    login_data: UserLoginDTO = Body(
+        description="Данные о контактном канале",
+        openapi_examples=get_examples_auth_post_login(),
+    ),
 ):
     """
     ## 🔒 Войти в существующий акканут
@@ -58,7 +62,10 @@ async def login(
 )
 async def register(
     db: DBDep,
-    register_data: UserRegisterDTO,
+    register_data: UserRegisterDTO = Body(
+        description="Данные о контактном канале",
+        openapi_examples=get_examples_auth_post_login(),
+    ),
 ):
     """
     ## 🔒 Зарегистрировать нового пользователя
@@ -100,7 +107,7 @@ async def refresh(
     """
     ## 🗝️ Получить новые Access и Refresh токены
     """
-    token_response: TokenResponseDTO = await AuthService(db).update_tokens(
+    token_response: TokenResponseDTO = await TokenService(db).update_tokens(
         uid=uid,
         response=response,
     )
@@ -116,7 +123,10 @@ async def refresh(
 async def update_profile(
     db: DBDep,
     uid: UidByAccess,
-    data: UserUpdateDTO,
+    data: UserUpdateDTO = Body(
+        description="Данные о контактном канале",
+        openapi_examples=get_examples_auth_put_profile(),
+    ),
 ) -> UserDTO:
     """
     ## 👤 Обновить профиль пользователя
@@ -131,11 +141,17 @@ async def update_profile(
     responses=AUTH_LOGOUT_RESPONSES,
 )
 async def logout(
-    _: UidByRefresh,
+    uid: UidByRefresh,
+    db: DBDep,
     response: Response,
 ) -> dict[str, str]:
     """
     ## 🔒 Выход из аккаунта
     """
-    response.delete_cookie(settings.auth.REFRESH_TOKEN_COOKIE_KEY)
+    await TokenService(db).delete_tokens(uid=uid)
+    response.delete_cookie(
+        settings.auth.REFRESH_TOKEN_COOKIE_KEY,
+        httponly=True,
+    )
+
     return {"detail": "Successfully logged out"}

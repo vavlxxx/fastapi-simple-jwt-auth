@@ -1,9 +1,10 @@
+import hashlib
 from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
-from fastapi import HTTPException, Response
-from jwt.exceptions import ExpiredSignatureError
+from fastapi import Response
+from jwt.exceptions import DecodeError, ExpiredSignatureError
 
 from src.config import settings
 from src.schemas.auth import (
@@ -19,27 +20,36 @@ from src.schemas.auth import (
     UserWithPasswordDTO,
 )
 from src.services.base import BaseService
-from src.utils.db_manager import DBManager
+from src.utils.db_tools import DBManager
 from src.utils.exceptions import (
+    CannotDecodeTokenError,
     InvalidLoginDataError,
     ObjectAlreadyExistsError,
     ObjectNotFoundError,
+    TokenExipedError,
     UserExistsHTTPError,
     UserNotFoundError,
 )
 
 
-class AuthService(BaseService):
-    def __init__(self, db_manager: DBManager | None = None) -> None:
-        super().__init__(db_manager=db_manager)
+class TokenService(BaseService):
+    def __init__(self, db: DBManager | None = None) -> None:
+        super().__init__(db=db)
 
-    def _hash_data(self, password: str) -> str:
+    def hash_token(self, token: str) -> str:
+        token_bytes = token.encode("utf-8")
+        return hashlib.sha256(token_bytes).hexdigest()
+
+    def verify_token(self, token: str, hashed_token: str) -> bool:
+        return self.hash_token(token) == hashed_token
+
+    def hash_pwd(self, password: str) -> str:
         salt = bcrypt.gensalt()
         pwd_bytes: bytes = password.encode(encoding="utf-8")
         hashed_pwd_bytes = bcrypt.hashpw(pwd_bytes, salt)
         return hashed_pwd_bytes.decode(encoding="utf-8")
 
-    def _verify_data(self, password: str, hashed_password: str) -> bool:
+    def verify_pwd(self, password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(
             password=password.encode(encoding="utf-8"),
             hashed_password=hashed_password.encode(encoding="utf-8"),
@@ -91,23 +101,13 @@ class AuthService(BaseService):
             decoded_token = jwt.decode(
                 jwt=token,
                 key=settings.auth.JWT_PUBLIC_KEY.read_text(),
-                algorithms=(settings.auth.JWT_ALGORITHM),
+                algorithms=[settings.auth.JWT_ALGORITHM],
             )
         except ExpiredSignatureError as exc:
-            raise HTTPException(status_code=401, detail=str(exc))
+            raise TokenExipedError from exc
+        except DecodeError as exc:
+            raise CannotDecodeTokenError from exc
         return decoded_token
-
-    async def login_user(self, login_data: UserLoginDTO, response: Response) -> TokenResponseDTO:
-        try:
-            user: UserWithPasswordDTO = await self.db.auth.get_user_with_passwd(username=login_data.username)
-        except ObjectNotFoundError as exc:
-            raise InvalidLoginDataError from exc
-
-        is_same = self._verify_data(login_data.password, user.hashed_password)
-        if not user or not is_same:
-            raise InvalidLoginDataError
-
-        return await self.update_tokens(user=user, response=response)
 
     async def update_tokens(
         self,
@@ -121,7 +121,7 @@ class AuthService(BaseService):
         access_token = self.create_access_token(payload={"username": user.username, "sub": f"{user.id}"})
         refresh_token = self.create_refresh_token(payload={"sub": f"{user.id}"})
 
-        hashed_refresh_token = self._hash_data(refresh_token.token)
+        hashed_refresh_token = self.hash_token(refresh_token.token)
 
         token_to_update = TokenAddDTO(
             hashed_data=hashed_refresh_token,
@@ -146,8 +146,33 @@ class AuthService(BaseService):
             refresh_token=refresh_token.token,
         )
 
+    async def delete_tokens(self, uid: int) -> None:
+        await self.db.tokens.delete(
+            user_id=uid,
+            ensure_existence=False,
+        )
+        await self.db.commit()
+
+
+class AuthService(BaseService):
+    def __init__(self, db: DBManager | None = None) -> None:
+        super().__init__(db=db)
+
+    async def login_user(self, login_data: UserLoginDTO, response: Response) -> TokenResponseDTO:
+        try:
+            user: UserWithPasswordDTO = await self.db.auth.get_user_with_passwd(username=login_data.username)
+        except ObjectNotFoundError as exc:
+            raise InvalidLoginDataError from exc
+
+        token_service = TokenService(self.db)
+        is_same = token_service.verify_pwd(login_data.password, user.hashed_password)
+        if not user or not is_same:
+            raise InvalidLoginDataError
+
+        return await token_service.update_tokens(user=user, response=response)
+
     async def register_user(self, register_data: UserRegisterDTO) -> UserDTO:
-        hashed_password = self._hash_data(register_data.password)
+        hashed_password = TokenService(self.db).hash_pwd(register_data.password)
         user_to_add = UserAddDTO(
             hashed_password=hashed_password,
             **register_data.model_dump(exclude={"password"}),

@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from src.schemas.base import BaseDTO
 
@@ -31,6 +32,13 @@ class UserDTO(BaseDTO):
 class UserUpdateDTO(BaseDTO):
     first_name: str | None = None
     last_name: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_atleast_one_field_provided(cls, data: Any) -> Any:
+        if not any(data.values()):
+            raise ValueError("Provide at least one not empty field for update")
+        return data
 
 
 class UserWithPasswordDTO(UserDTO):

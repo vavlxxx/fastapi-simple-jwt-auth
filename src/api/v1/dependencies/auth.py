@@ -7,13 +7,16 @@ from jwt import ExpiredSignatureError
 from src.api.v1.dependencies.db import DBDep
 from src.config import settings
 from src.schemas.auth import TokenType
-from src.services.auth import AuthService
+from src.services.auth import TokenService
 from src.utils.exceptions import (
+    CannotDecodeTokenError,
+    CannotDecodeTokenHTTPError,
     ExpiredSignatureHTTPError,
     InvalidTokenTypeHTTPError,
     MissingSubjectHTTPError,
     MissingTokenHTTPError,
     ObjectNotFoundError,
+    TokenExipedError,
     WithdrawnTokenHTTPError,
 )
 
@@ -34,9 +37,13 @@ def _get_refresh_token(request: Request):
 
 def _decode_token(token: str):
     try:
-        return AuthService().decode_token(token)
+        return TokenService().decode_token(token)
+    except TokenExipedError as exc:
+        raise ExpiredSignatureHTTPError from exc
     except ExpiredSignatureError as exc:
         raise ExpiredSignatureHTTPError from exc
+    except CannotDecodeTokenError as exc:
+        raise CannotDecodeTokenHTTPError from exc
 
 
 def _validate_token_type(payload: dict, expected_type: TokenType):

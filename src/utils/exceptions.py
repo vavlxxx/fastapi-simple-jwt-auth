@@ -42,6 +42,23 @@ class UserExistsError(ApplicationError):
     detail = "User already exists"
 
 
+class TokenExipedError(ApplicationError):
+    detail = "Token has expired, try to login again"
+
+
+class CannotDecodeTokenError(ApplicationError):
+    detail = "Cannot decode token"
+
+
+class MissingTablesError(ApplicationError):
+    detail = "Missing tables"
+
+    def __init__(self, detail: set | None = None):
+        if detail is not None and isinstance(detail, set):
+            self.detail = f"{self.detail}: %s" % ", ".join(map(repr, detail))
+        super().__init__(self.detail)
+
+
 class ApplicationHTTPError(HTTPException):
     detail = "Something went wrong"
     status = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -57,8 +74,13 @@ class ExpiredSignatureHTTPError(ApplicationHTTPError):
     status = status.HTTP_401_UNAUTHORIZED
 
 
+class CannotDecodeTokenHTTPError(ApplicationHTTPError):
+    detail = "Cannot decode token"
+    status = status.HTTP_401_UNAUTHORIZED
+
+
 class InvalidTokenTypeHTTPError(ApplicationHTTPError):
-    detail = "Invalid token type, expected {1}, got {2}"
+    detail = "Invalid token type, expected {0}, got {1}"
     status = status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def __init__(self, *args, expected_type, actual_type, **kwargs):
